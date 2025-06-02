@@ -35,10 +35,8 @@ ENV/
 # Project specific
 *.pth
 *.png
-*.csv
 *.log
 logs/
-models/
 data/raw/
 data/processed/
 
