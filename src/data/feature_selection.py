@@ -1,7 +1,6 @@
 """
 Feature selection for trajectory prediction
-Selects the best features using Lasso regularization or Random Forest
-Always includes original PL and RMS features
+Selects the most informative features for predicting radial distance
 """
 
 import pandas as pd
@@ -15,27 +14,29 @@ from sklearn.multioutput import MultiOutputRegressor
 from sklearn.ensemble import RandomForestRegressor
 import warnings
 warnings.filterwarnings('ignore')
+from sklearn.feature_selection import mutual_info_regression, SelectKBest
+from sklearn.model_selection import cross_val_score
 
 
 class FeatureSelector:
-    def __init__(self, target_cols=['X', 'Y'], n_features=7, method='lasso'):
+    def __init__(self, target_col='r', n_features=7, method='random_forest'):
         """
         Initialize the feature selector
         
         Parameters:
         -----------
-        target_cols : list
-            List of target column names
+        target_col : str
+            Target column name (default: 'r' for radial distance)
         n_features : int
             Total number of features to select (including PL and RMS)
         method : str
-            Selection method - 'lasso' or 'random_forest'
+            Selection method - 'lasso', 'random_forest', or 'mutual_info'
         """
-        self.target_cols = target_cols
+        self.target_col = target_col
         self.n_features = n_features
         self.method = method
-        self.selected_features = []
         self.feature_scores = {}
+        self.selected_features = []
         self.scaler = StandardScaler()
         # Always include these base features
         self.mandatory_features = ['PL', 'RMS']
@@ -77,7 +78,7 @@ class FeatureSelector:
             raise ValueError("Data must contain trajectory_id and step_id columns")
         
         # Identify feature columns (exclude targets and metadata)
-        exclude_cols = self.target_cols + ['r', 'trajectory_id', 'step_id']
+        exclude_cols = ['X', 'Y', 'r', 'trajectory_id', 'step_id']
         feature_cols = [col for col in df.columns if col not in exclude_cols]
         
         # Remove any remaining NaN or infinite values
@@ -93,7 +94,7 @@ class FeatureSelector:
         
         # Extract features and targets
         X = df_clean[feature_cols].values
-        y = df_clean[self.target_cols].values
+        y = df_clean[self.target_col].values.reshape(-1, 1)  # Ensure 2D for consistency
         
         print(f"\nFeature matrix shape: {X.shape}")
         print(f"Target matrix shape: {y.shape}")
@@ -101,18 +102,18 @@ class FeatureSelector:
         
         return X, y, feature_cols
     
-    def lasso_selection(self, X, y, feature_names):
+    def select_with_lasso(self, X, y, feature_names):
         """
-        Feature selection using Lasso regularization
+        Select features using Lasso regularization
         
         Parameters:
         -----------
-        X : np.array
+        X : np.ndarray
             Feature matrix
-        y : np.array
-            Target matrix
+        y : np.ndarray  
+            Target values (radial distance)
         feature_names : list
-            List of feature names
+            Names of features
             
         Returns:
         --------
@@ -123,28 +124,15 @@ class FeatureSelector:
         # Scale features
         X_scaled = self.scaler.fit_transform(X)
         
-        # For multi-output, we'll use Lasso on each target and combine results
-        feature_importance = np.zeros(len(feature_names))
+        # Lasso with cross-validation
+        lasso = LassoCV(cv=5, random_state=42, max_iter=5000, n_alphas=100)
+        lasso.fit(X_scaled, y.ravel())  # Use ravel() for 1D target
         
-        for i, target in enumerate(self.target_cols):
-            print(f"\nAnalyzing features for {target}...")
-            
-            # Lasso with cross-validation
-            lasso = LassoCV(cv=5, random_state=42, max_iter=5000, n_alphas=100)
-            lasso.fit(X_scaled, y[:, i])
-            
-            # Get feature importances (absolute coefficients)
-            importance = np.abs(lasso.coef_)
-            feature_importance += importance
-            
-            print(f"Lasso alpha for {target}: {lasso.alpha_:.6f}")
-            print(f"Number of non-zero coefficients: {np.sum(importance > 0)}")
-        
-        # Average importance across targets
-        feature_importance /= len(self.target_cols)
+        # Get feature importances (absolute coefficients)
+        importance = np.abs(lasso.coef_)
         
         # Create a dict of feature scores
-        feature_score_dict = dict(zip(feature_names, feature_importance))
+        feature_score_dict = dict(zip(feature_names, importance))
         
         # Get top features (excluding mandatory ones first)
         non_mandatory_features = [f for f in feature_names if f not in self.mandatory_features]
@@ -168,18 +156,71 @@ class FeatureSelector:
         
         return selected_features
     
-    def random_forest_selection(self, X, y, feature_names):
+    def select_with_mutual_info(self, X, y, feature_names):
         """
-        Feature selection using Random Forest feature importance
+        Select features using mutual information
         
         Parameters:
         -----------
-        X : np.array
-            Feature matrix
-        y : np.array
-            Target matrix
+        X : np.ndarray
+            Feature matrix  
+        y : np.ndarray
+            Target values (radial distance)
         feature_names : list
-            List of feature names
+            Names of features
+            
+        Returns:
+        --------
+        list : Selected feature names
+        """
+        print(f"\n--- Mutual Information Feature Selection (Top {self.n_features} features) ---")
+        
+        # Calculate mutual information scores
+        mi_scores = mutual_info_regression(X, y.ravel(), random_state=42)
+        
+        # Create a dict of feature scores
+        feature_score_dict = dict(zip(feature_names, mi_scores))
+        
+        # Print scores for mandatory features
+        print(f"\nMandatory feature scores:")
+        for feat in self.mandatory_features:
+            if feat in feature_score_dict:
+                print(f"  {feat}: {feature_score_dict[feat]:.4f}")
+        
+        # Get top features (excluding mandatory ones first)
+        non_mandatory_features = [f for f in feature_names if f not in self.mandatory_features]
+        non_mandatory_scores = [(f, feature_score_dict[f]) for f in non_mandatory_features]
+        non_mandatory_scores.sort(key=lambda x: x[1], reverse=True)
+        
+        # Select top features after mandatory ones
+        n_additional = self.n_features - len(self.mandatory_features)
+        selected_additional = [f for f, score in non_mandatory_scores[:n_additional]]
+        
+        # Combine mandatory and selected features
+        selected_features = self.mandatory_features + selected_additional
+        
+        # Print all selected features with scores
+        print(f"\nSelected {len(selected_features)} features:")
+        for feat in selected_features:
+            print(f"  {feat}: {feature_score_dict[feat]:.4f}")
+        
+        # Store scores
+        self.feature_scores['mutual_info'] = feature_score_dict
+        
+        return selected_features
+    
+    def select_with_random_forest(self, X, y, feature_names):
+        """
+        Select features using Random Forest importance
+        
+        Parameters:
+        -----------
+        X : np.ndarray
+            Feature matrix
+        y : np.ndarray
+            Target values (radial distance)  
+        feature_names : list
+            Names of features
             
         Returns:
         --------
@@ -187,19 +228,12 @@ class FeatureSelector:
         """
         print(f"\n--- Random Forest Feature Selection (Top {self.n_features} features) ---")
         
-        # Use MultiOutputRegressor for multi-target regression
-        rf = MultiOutputRegressor(
-            RandomForestRegressor(n_estimators=200, random_state=42, n_jobs=-1, max_depth=10)
-        )
-        rf.fit(X, y)
+        # Random Forest for single output regression
+        rf = RandomForestRegressor(n_estimators=200, random_state=42, n_jobs=-1, max_depth=10)
+        rf.fit(X, y.ravel())
         
-        # Get feature importances (average across all trees and targets)
-        feature_importance = np.zeros(len(feature_names))
-        
-        for i, estimator in enumerate(rf.estimators_):
-            feature_importance += estimator.feature_importances_
-            
-        feature_importance /= len(rf.estimators_)
+        # Get feature importances
+        feature_importance = rf.feature_importances_
         
         # Create a dict of feature scores
         feature_score_dict = dict(zip(feature_names, feature_importance))
@@ -308,11 +342,13 @@ class FeatureSelector:
         
         # Apply selected method
         if self.method == 'lasso':
-            selected_features = self.lasso_selection(X, y, feature_names)
+            selected_features = self.select_with_lasso(X, y, feature_names)
+        elif self.method == 'mutual_info':
+            selected_features = self.select_with_mutual_info(X, y, feature_names)
         elif self.method == 'random_forest':
-            selected_features = self.random_forest_selection(X, y, feature_names)
+            selected_features = self.select_with_random_forest(X, y, feature_names)
         else:
-            raise ValueError(f"Unknown method: {self.method}. Use 'lasso' or 'random_forest'")
+            raise ValueError(f"Unknown method: {self.method}. Use 'lasso', 'mutual_info', or 'random_forest'")
         
         self.selected_features = selected_features
         
@@ -336,7 +372,7 @@ class FeatureSelector:
             List of selected feature names
         """
         # Include targets and metadata in the output
-        output_cols = self.target_cols + ['trajectory_id', 'step_id'] + selected_features
+        output_cols = ['r', 'trajectory_id', 'step_id'] + selected_features
         
         # Ensure all columns exist
         output_cols = [col for col in output_cols if col in df.columns]
@@ -369,10 +405,10 @@ def main(method='random_forest'):
     Parameters:
     -----------
     method : str
-        Feature selection method - 'lasso' or 'random_forest'
+        Feature selection method - 'lasso', 'random_forest', or 'mutual_info'
     """
-    # Initialize selector with 7 features total (including PL and RMS)
-    selector = FeatureSelector(target_cols=['X', 'Y'], n_features=7, method=method)
+    # Initialize selector with 7 features total (including PL and RMS) for radial distance
+    selector = FeatureSelector(target_col='r', n_features=7, method=method)
     
     # Perform feature selection
     selected_features = selector.select_features()

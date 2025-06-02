@@ -41,9 +41,13 @@ class TrajectoryDataLoader:
             if missing_columns:
                 raise ValueError(f"Missing required columns: {missing_columns}")
             
+            # Compute radial distance r = sqrt(x^2 + y^2)
+            df['r'] = np.sqrt(df['X']**2 + df['Y']**2)
+            
             print(f"Successfully loaded data from {self.data_path}")
             print(f"Data shape: {df.shape}")
             print(f"Columns: {df.columns.tolist()}")
+            print(f"Radial distance (r) computed: min={df['r'].min():.2f}, max={df['r'].max():.2f}")
             
             return df
             
@@ -106,7 +110,7 @@ def main():
     
     # Display basic statistics
     print("\nData statistics:")
-    print(df[['X', 'Y', 'PL', 'RMS']].describe())
+    print(df[['X', 'Y', 'r', 'PL', 'RMS']].describe())
     
     # Split into trajectories
     train_df, val_df, train_ids, val_ids = loader.split_trajectories(df)

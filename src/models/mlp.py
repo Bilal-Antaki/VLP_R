@@ -1,20 +1,32 @@
 """
 Multi-Layer Perceptron (MLP) model for trajectory prediction
+Deep neural network for predicting radial distance
 """
 
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from sklearn.preprocessing import StandardScaler
 
 
-class MLPNetwork(nn.Module):
-    """
-    Multi-Layer Perceptron with batch normalization and dropout
-    """
-    
-    def __init__(self, input_size, hidden_sizes, output_size=2, dropout=0.2):
-        super(MLPNetwork, self).__init__()
+class TrajectoryMLP(nn.Module):
+    def __init__(self, input_size, hidden_sizes=[128, 64, 32], output_size=1, dropout=0.3):
+        """
+        MLP model for radial distance prediction
+        
+        Parameters:
+        -----------
+        input_size : int
+            Number of input features  
+        hidden_sizes : list
+            Sizes of hidden layers
+        output_size : int
+            Output size (radial distance = 1)
+        dropout : float
+            Dropout rate
+        """
+        super(TrajectoryMLP, self).__init__()
         
         # Build layers
         layers = []
@@ -81,7 +93,7 @@ class MLPModel:
         
         # Initialize model
         input_size = X.shape[1]
-        self.model = MLPNetwork(input_size, self.hidden_sizes, output_size=2, dropout=self.dropout)
+        self.model = TrajectoryMLP(input_size, self.hidden_sizes, output_size=1, dropout=self.dropout)
         self.model.to(self.device)
         
         # Loss and optimizer

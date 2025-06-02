@@ -37,17 +37,17 @@ def train_model():
     
     # Get feature columns
     feature_cols = [col for col in df.columns 
-                   if col not in ['X', 'Y', 'trajectory_id', 'step_id']]
+                   if col not in ['X', 'Y', 'r', 'trajectory_id', 'step_id']]
     
     # Split data
     train_df = df[df['trajectory_id'] < 16]
     val_df = df[df['trajectory_id'] >= 16]
     
     X_train = train_df[feature_cols].values
-    y_train = train_df[['X', 'Y']].values
+    Y_train = train_df[['r']].values
     
     X_val = val_df[feature_cols].values
-    y_val = val_df[['X', 'Y']].values
+    Y_val = val_df[['r']].values
     
     # Train model
     print(f"Training MLP model with architecture {MLP_CONFIG['hidden_sizes']}...")
@@ -57,7 +57,7 @@ def train_model():
         learning_rate=MLP_CONFIG['learning_rate'],
         epochs=MLP_CONFIG['epochs']
     )
-    model.fit(X_train, y_train)
+    model.fit(X_train, Y_train)
     
     print("Training complete!")
     
@@ -82,31 +82,24 @@ def train_model():
     
     print(f"\nModel saved to: {model_path}")
     
-    # Predict
-    y_pred = model.predict(X_val)
+    # Evaluate on validation set
+    val_pred = model.predict(X_val)
     
-    # Calculate metrics
-    rmse_x = np.sqrt(mean_squared_error(y_val[:, 0], y_pred[:, 0]))
-    rmse_y = np.sqrt(mean_squared_error(y_val[:, 1], y_pred[:, 1]))
+    # Metrics
+    rmse = np.sqrt(mean_squared_error(Y_val, val_pred))
+    mae = np.mean(np.abs(Y_val - val_pred))
     
-    errors_x = np.abs(y_val[:, 0] - y_pred[:, 0])
-    errors_y = np.abs(y_val[:, 1] - y_pred[:, 1])
+    print(f"\nValidation Metrics:")
+    print(f"Radial Distance (r) RMSE: {rmse:.2f}")
+    print(f"MAE: {mae:.2f}")
     
-    # Print results
-    print("\nMLP Results:")
-    print("-" * 40)
-    print(f"X coordinate:")
-    print(f"  RMSE: {rmse_x:.2f}")
-    print(f"  Mean error: {errors_x.mean():.2f}")
-    print(f"  Std error: {errors_x.std():.2f}")
-    print(f"\nY coordinate:")
-    print(f"  RMSE: {rmse_y:.2f}")
-    print(f"  Mean error: {errors_y.mean():.2f}")
-    print(f"  Std error: {errors_y.std():.2f}")
-    
-    # Combined metric
-    rmse_combined = np.sqrt((rmse_x**2 + rmse_y**2) / 2)
-    print(f"\nCombined RMSE: {rmse_combined:.2f}")
+    # Print sample predictions
+    print(f"\nSample predictions (first 10):")
+    print("True r | Pred r | Error")
+    print("-" * 30)
+    for i in range(min(10, len(Y_val))):
+        error = abs(Y_val[i, 0] - val_pred[i, 0])
+        print(f"{Y_val[i, 0]:6.2f} | {val_pred[i, 0]:6.2f} | {error:6.2f}")
 
 
 if __name__ == "__main__":

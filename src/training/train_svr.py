@@ -33,7 +33,7 @@ def prepare_data():
     
     # Get feature columns
     feature_cols = [col for col in df.columns 
-                   if col not in ['X', 'Y', 'trajectory_id', 'step_id']]
+                   if col not in ['X', 'Y', 'r', 'trajectory_id', 'step_id']]
     
     print(f"Using features: {feature_cols}")
     
@@ -44,12 +44,12 @@ def prepare_data():
     # Prepare training data
     train_df = df[df['trajectory_id'].isin(train_traj_ids)]
     X_train = train_df[feature_cols].values
-    Y_train = train_df[['X', 'Y']].values
+    Y_train = train_df[['r']].values
     
     # Prepare validation data
     val_df = df[df['trajectory_id'].isin(val_traj_ids)]
     X_val = val_df[feature_cols].values
-    Y_val = val_df[['X', 'Y']].values
+    Y_val = val_df[['r']].values
     
     # Get trajectory structure for validation
     val_trajectories = []
@@ -58,7 +58,7 @@ def prepare_data():
         if len(traj_data) == 10:
             val_trajectories.append({
                 'X': traj_data[feature_cols].values,
-                'Y': traj_data[['X', 'Y']].values,
+                'Y': traj_data[['r']].values,
                 'id': traj_id
             })
     
@@ -69,25 +69,51 @@ def prepare_data():
     return (X_train, Y_train, X_val, Y_val), val_trajectories
 
 
-def evaluate_trajectories(model, trajectories):
+def evaluate_model(model, X_val, Y_val, val_trajectories):
     """
-    Evaluate model on trajectory level (not just individual points)
+    Evaluate model performance
     """
-    rmse_x_list = []
-    rmse_y_list = []
+    # Predict on validation set
+    val_pred = model.predict(X_val)
     
-    for traj in trajectories:
+    # Point-wise metrics
+    rmse = np.sqrt(mean_squared_error(Y_val, val_pred))
+    mae = np.mean(np.abs(Y_val.ravel() - val_pred))
+    
+    print(f"\nPoint-wise Validation Metrics:")
+    print(f"RMSE: {rmse:.2f}")
+    print(f"MAE: {mae:.2f}")
+    
+    # Trajectory-level evaluation
+    rmse_per_traj = []
+    
+    for traj in val_trajectories:
         # Predict
         predictions = model.predict(traj['X'])
         
         # Calculate RMSE for this trajectory
-        rmse_x = np.sqrt(mean_squared_error(traj['Y'][:, 0], predictions[:, 0]))
-        rmse_y = np.sqrt(mean_squared_error(traj['Y'][:, 1], predictions[:, 1]))
-        
-        rmse_x_list.append(rmse_x)
-        rmse_y_list.append(rmse_y)
+        mse = mean_squared_error(traj['Y'], predictions)
+        rmse = np.sqrt(mse)
+        rmse_per_traj.append(rmse)
     
-    return np.array(rmse_x_list), np.array(rmse_y_list)
+    rmse_per_traj = np.array(rmse_per_traj)
+    
+    print(f"\nTrajectory-level Validation Metrics:")
+    print(f"Radial Distance (r):")
+    print(f"  RMSE: {rmse_per_traj.mean():.2f}")
+    print(f"  Std: {rmse_per_traj.std():.2f}")
+    
+    # Print sample predictions
+    if val_trajectories:
+        sample_traj = val_trajectories[0]
+        sample_pred = model.predict(sample_traj['X'])
+        
+        print(f"\nSample predictions for trajectory {sample_traj['id']}:")
+        print("Step | True r | Pred r | Error")
+        print("-" * 35)
+        for i in range(min(5, len(sample_pred))):
+            error = abs(sample_traj['Y'][i, 0] - sample_pred[i])
+            print(f"{i+1:4d} | {sample_traj['Y'][i, 0]:6.2f} | {sample_pred[i]:6.2f} | {error:6.2f}")
 
 
 def train_model():
@@ -129,43 +155,7 @@ def train_model():
     print(f"\nModel saved to: {model_path}")
     
     # Evaluate on validation set (point-wise)
-    val_pred = model.predict(X_val)
-    
-    # Point-wise metrics
-    rmse_x_points = np.sqrt(mean_squared_error(Y_val[:, 0], val_pred[:, 0]))
-    rmse_y_points = np.sqrt(mean_squared_error(Y_val[:, 1], val_pred[:, 1]))
-    
-    print(f"\nPoint-wise Validation Metrics:")
-    print(f"RMSE X: {rmse_x_points:.2f}")
-    print(f"RMSE Y: {rmse_y_points:.2f}")
-    
-    # Trajectory-level evaluation
-    rmse_x_trajs, rmse_y_trajs = evaluate_trajectories(model, val_trajectories)
-    
-    print(f"\nTrajectory-level Validation Metrics:")
-    print(f"X-coordinate:")
-    print(f"  RMSE: {rmse_x_trajs.mean():.2f}")
-    print(f"  Std: {rmse_x_trajs.std():.2f}")
-    
-    print(f"Y-coordinate:")
-    print(f"  RMSE: {rmse_y_trajs.mean():.2f}")
-    print(f"  Std: {rmse_y_trajs.std():.2f}")
-    
-    # Combined metric
-    rmse_combined = np.sqrt((rmse_x_trajs**2 + rmse_y_trajs**2) / 2)
-    print(f"\nCombined RMSE: {rmse_combined.mean():.2f} ± {rmse_combined.std():.2f}")
-    
-    # Print sample predictions
-    if val_trajectories:
-        sample_traj = val_trajectories[0]
-        sample_pred = model.predict(sample_traj['X'])
-        
-        print(f"\nSample predictions for trajectory {sample_traj['id']}:")
-        print("Step | True X | Pred X | True Y | Pred Y")
-        print("-" * 45)
-        for i in range(min(5, len(sample_pred))):  # Show first 5 steps
-            print(f"{i+1:4d} | {sample_traj['Y'][i, 0]:6.0f} | {sample_pred[i, 0]:6.0f} | "
-                  f"{sample_traj['Y'][i, 1]:6.0f} | {sample_pred[i, 1]:6.0f}")
+    evaluate_model(model, X_val, Y_val, val_trajectories)
 
 
 def load_and_evaluate():
@@ -185,7 +175,7 @@ def load_and_evaluate():
     # Load test data
     df = pd.read_csv('data/features/features_selected.csv')
     feature_cols = [col for col in df.columns 
-                   if col not in ['X', 'Y', 'trajectory_id', 'step_id']]
+                   if col not in ['X', 'Y', 'r', 'trajectory_id', 'step_id']]
     
     # Test on a specific trajectory
     test_traj_id = 19
@@ -193,30 +183,25 @@ def load_and_evaluate():
     
     if len(test_data) == 10:
         X_test = test_data[feature_cols].values
-        Y_test = test_data[['X', 'Y']].values
+        Y_test = test_data[['r']].values
         
         # Predict
         predictions = model.predict(X_test)
         
         print(f"\nPredictions for trajectory {test_traj_id}:")
-        print("Step | True X | Pred X | True Y | Pred Y | Error X | Error Y")
-        print("-" * 70)
+        print("Step | True r | Pred r | Error")
+        print("-" * 35)
         for i in range(len(predictions)):
-            error_x = abs(Y_test[i, 0] - predictions[i, 0])
-            error_y = abs(Y_test[i, 1] - predictions[i, 1])
-            print(f"{i+1:4d} | {Y_test[i, 0]:6.0f} | {predictions[i, 0]:6.0f} | "
-                  f"{Y_test[i, 1]:6.0f} | {predictions[i, 1]:6.0f} | "
-                  f"{error_x:7.1f} | {error_y:7.1f}")
+            error = abs(Y_test[i, 0] - predictions[i])
+            print(f"{i+1:4d} | {Y_test[i, 0]:6.2f} | {predictions[i]:6.2f} | {error:6.2f}")
         
         # Overall metrics
-        mae_x = np.mean(np.abs(Y_test[:, 0] - predictions[:, 0]))
-        mae_y = np.mean(np.abs(Y_test[:, 1] - predictions[:, 1]))
-        rmse_x = np.sqrt(mean_squared_error(Y_test[:, 0], predictions[:, 0]))
-        rmse_y = np.sqrt(mean_squared_error(Y_test[:, 1], predictions[:, 1]))
+        mae = np.mean(np.abs(Y_test[:, 0] - predictions))
+        rmse = np.sqrt(mean_squared_error(Y_test[:, 0], predictions))
         
         print(f"\nMetrics for trajectory {test_traj_id}:")
-        print(f"MAE  - X: {mae_x:.2f}, Y: {mae_y:.2f}")
-        print(f"RMSE - X: {rmse_x:.2f}, Y: {rmse_y:.2f}")
+        print(f"MAE: {mae:.2f}")
+        print(f"RMSE: {rmse:.2f}")
 
 
 if __name__ == "__main__":

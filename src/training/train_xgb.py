@@ -34,17 +34,21 @@ def train_model():
     
     # Get feature columns
     feature_cols = [col for col in df.columns 
-                   if col not in ['X', 'Y', 'trajectory_id', 'step_id']]
+                   if col not in ['X', 'Y', 'r', 'trajectory_id', 'step_id']]
     
     # Split data
-    train_df = df[df['trajectory_id'] < 16]
-    val_df = df[df['trajectory_id'] >= 16]
+    train_traj_ids = list(range(16))
+    val_traj_ids = list(range(16, 20))
     
+    # Prepare training data
+    train_df = df[df['trajectory_id'].isin(train_traj_ids)]
     X_train = train_df[feature_cols].values
-    y_train = train_df[['X', 'Y']].values
+    Y_train = train_df[['r']].values.ravel()
     
+    # Prepare validation data
+    val_df = df[df['trajectory_id'].isin(val_traj_ids)]
     X_val = val_df[feature_cols].values
-    y_val = val_df[['X', 'Y']].values
+    Y_val = val_df[['r']].values.ravel()
     
     # Train model
     print(f"Training XGBoost model with n_estimators={XGB_CONFIG['n_estimators']}, max_depth={XGB_CONFIG['max_depth']}, learning_rate={XGB_CONFIG['learning_rate']}...")
@@ -54,7 +58,7 @@ def train_model():
         learning_rate=XGB_CONFIG['learning_rate'],
         random_state=XGB_CONFIG['random_state']
     )
-    model.fit(X_train, y_train)
+    model.fit(X_train, Y_train)
     
     print("Training complete!")
     
@@ -72,31 +76,26 @@ def train_model():
     
     print(f"\nModel saved to: {model_path}")
     
-    # Predict
-    y_pred = model.predict(X_val)
+    # Evaluate on validation set
+    val_pred = model.predict(X_val)
     
-    # Calculate metrics
-    rmse_x = np.sqrt(mean_squared_error(y_val[:, 0], y_pred[:, 0]))
-    rmse_y = np.sqrt(mean_squared_error(y_val[:, 1], y_pred[:, 1]))
+    # Metrics
+    rmse = np.sqrt(mean_squared_error(Y_val, val_pred))
+    mae = np.mean(np.abs(Y_val - val_pred))
     
-    errors_x = np.abs(y_val[:, 0] - y_pred[:, 0])
-    errors_y = np.abs(y_val[:, 1] - y_pred[:, 1])
+    print(f"\nValidation Metrics:")
+    print(f"Radial Distance (r) RMSE: {rmse:.2f}")
+    print(f"MAE: {mae:.2f}")
     
-    # Print results
-    print("\nXGBoost Results:")
-    print("-" * 40)
-    print(f"X coordinate:")
-    print(f"  RMSE: {rmse_x:.2f}")
-    print(f"  Mean error: {errors_x.mean():.2f}")
-    print(f"  Std error: {errors_x.std():.2f}")
-    print(f"\nY coordinate:")
-    print(f"  RMSE: {rmse_y:.2f}")
-    print(f"  Mean error: {errors_y.mean():.2f}")
-    print(f"  Std error: {errors_y.std():.2f}")
+    # Feature importance
+    print("\nTop 10 Feature Importances:")
+    feature_importance = pd.DataFrame({
+        'feature': feature_cols,
+        'importance': model.model.feature_importances_
+    }).sort_values('importance', ascending=False)
     
-    # Combined metric
-    rmse_combined = np.sqrt((rmse_x**2 + rmse_y**2) / 2)
-    print(f"\nCombined RMSE: {rmse_combined:.2f}")
+    for idx, row in feature_importance.head(10).iterrows():
+        print(f"{row['feature']}: {row['importance']:.4f}")
 
 
 if __name__ == "__main__":

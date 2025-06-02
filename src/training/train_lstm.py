@@ -36,7 +36,7 @@ def prepare_data():
     
     # Get feature columns
     feature_cols = [col for col in df.columns 
-                   if col not in ['X', 'Y', 'trajectory_id', 'step_id']]
+                   if col not in ['X', 'Y', 'r', 'trajectory_id', 'step_id']]
     
     print(f"Using features: {feature_cols}")
     
@@ -50,7 +50,7 @@ def prepare_data():
         traj_data = df[df['trajectory_id'] == traj_id].sort_values('step_id')
         if len(traj_data) == 10:
             X_train.append(traj_data[feature_cols].values)
-            Y_train.append(traj_data[['X', 'Y']].values)
+            Y_train.append(traj_data[['r']].values)
     
     # Prepare validation data
     X_val, Y_val = [], []
@@ -58,7 +58,7 @@ def prepare_data():
         traj_data = df[df['trajectory_id'] == traj_id].sort_values('step_id')
         if len(traj_data) == 10:
             X_val.append(traj_data[feature_cols].values)
-            Y_val.append(traj_data[['X', 'Y']].values)
+            Y_val.append(traj_data[['r']].values)
     
     X_train = np.array(X_train)
     Y_train = np.array(Y_train)
@@ -107,7 +107,7 @@ def train_model():
     hidden_size = MODEL_CONFIG['hidden_dim']
     num_layers = MODEL_CONFIG['num_layers']
     dropout = MODEL_CONFIG['dropout']
-    output_size = 2
+    output_size = 1  # Changed from 2 to 1 for radial distance
     
     # Initialize model
     model = TrajectoryLSTM(input_size, hidden_size, num_layers, output_size, dropout=dropout)
@@ -196,53 +196,40 @@ def train_model():
         Y_val_np = Y_val.numpy()
         
         # Reshape for inverse transform
-        val_pred_flat = val_pred_scaled_np.reshape(-1, 2)
-        Y_val_flat = Y_val_np.reshape(-1, 2)
+        val_pred_flat = val_pred_scaled_np.reshape(-1, 1)
+        Y_val_flat = Y_val_np.reshape(-1, 1)
         
         # Inverse transform
-        val_pred = scaler_Y.inverse_transform(val_pred_flat).reshape(val_pred_scaled_np.shape).astype(int)
-        Y_val_true = scaler_Y.inverse_transform(Y_val_flat).reshape(Y_val_np.shape).astype(int)
+        val_pred = scaler_Y.inverse_transform(val_pred_flat).reshape(val_pred_scaled_np.shape)
+        Y_val_true = scaler_Y.inverse_transform(Y_val_flat).reshape(Y_val_np.shape)
         
-        # Calculate RMSE for each trajectory, separately for X and Y
-        rmse_x_per_traj = []
-        rmse_y_per_traj = []
+        # Calculate RMSE for each trajectory
+        rmse_per_traj = []
         
         for i in range(len(val_pred)):
-            # X coordinate RMSE
-            mse_x = mean_squared_error(Y_val_true[i, :, 0], val_pred[i, :, 0])
-            rmse_x = np.sqrt(mse_x)
-            rmse_x_per_traj.append(rmse_x)
-            
-            # Y coordinate RMSE
-            mse_y = mean_squared_error(Y_val_true[i, :, 1], val_pred[i, :, 1])
-            rmse_y = np.sqrt(mse_y)
-            rmse_y_per_traj.append(rmse_y)
+            # Radial distance RMSE
+            mse = mean_squared_error(Y_val_true[i], val_pred[i])
+            rmse = np.sqrt(mse)
+            rmse_per_traj.append(rmse)
         
-        rmse_x_per_traj = np.array(rmse_x_per_traj)
-        rmse_y_per_traj = np.array(rmse_y_per_traj)
+        rmse_per_traj = np.array(rmse_per_traj)
         
         # Print detailed results
-        print("\nX-coordinate Metrics:")
-        print(f"RMSE: {rmse_x_per_traj.mean():.2f}")
-        print(f"Std: {rmse_x_per_traj.std():.2f}")
-        print(f"Mean: {np.mean(np.abs(Y_val_true[:, :, 0] - val_pred[:, :, 0])):.2f}")
+        print("\nRadial Distance (r) Metrics:")
+        print(f"RMSE: {rmse_per_traj.mean():.2f}")
+        print(f"Std: {rmse_per_traj.std():.2f}")
+        print(f"MAE: {np.mean(np.abs(Y_val_true - val_pred)):.2f}")
         
-        print("\nY-coordinate Metrics:")
-        print(f"RMSE: {rmse_y_per_traj.mean():.2f}")
-        print(f"Std: {rmse_y_per_traj.std():.2f}")
-        print(f"Mean: {np.mean(np.abs(Y_val_true[:, :, 1] - val_pred[:, :, 1])):.2f}")
-        
-        print("\nOverall Metrics:")
-        rmse_total = np.sqrt((rmse_x_per_traj**2 + rmse_y_per_traj**2)/2)
-        print(f"Combined RMSE: {rmse_total.mean():.2f}")
-        print(f"Combined Std: {rmse_total.std():.2f}")
-        
-        # Print sample predictions if needed
+        # Print sample predictions
         print(f"\nSample true and predicted values (first trajectory):")
-        print(f"X: {Y_val_true[0, :, 0]}")
-        print(f"X_pred: {val_pred[0, :, 0]}")
-        print(f"Y: {Y_val_true[0, :, 1]}")
-        print(f"Y_pred: {val_pred[0, :, 1]}")
+        print(f"True r: {Y_val_true[0].ravel()}")
+        print(f"Pred r: {val_pred[0].ravel()}")
+        
+        # Check distance constraints (if applicable)
+        print(f"\nDistance statistics:")
+        print(f"Min predicted r: {val_pred.min():.2f}")
+        print(f"Max predicted r: {val_pred.max():.2f}")
+        print(f"Mean predicted r: {val_pred.mean():.2f}")
 
 
 if __name__ == "__main__":

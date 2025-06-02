@@ -1,6 +1,6 @@
 """
 LSTM model for trajectory prediction
-Predicts X,Y coordinates from PL and RMS features
+Predicts radial distance (r) from PL and RMS features
 """
 
 import torch
@@ -8,7 +8,7 @@ import torch.nn as nn
 
 
 class TrajectoryLSTM(nn.Module):
-    def __init__(self, input_size=7, hidden_size=128, num_layers=3, output_size=2, dropout=0.3):
+    def __init__(self, input_size=7, hidden_size=128, num_layers=3, output_size=1, dropout=0.3):
         """
         Improved LSTM model for trajectory prediction
         
@@ -21,7 +21,7 @@ class TrajectoryLSTM(nn.Module):
         num_layers : int
             Number of LSTM layers
         output_size : int
-            Output size (X, Y coordinates = 2)
+            Output size (radial distance r = 1)
         dropout : float
             Dropout rate
         """
