@@ -37,8 +37,6 @@ ENV/
 *.png
 *.log
 logs/
-data/raw/
-data/processed/
 
 # OS specific
 .DS_Store
