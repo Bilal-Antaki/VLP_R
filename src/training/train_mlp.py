@@ -92,14 +92,7 @@ def train_model():
     print(f"\nValidation Metrics:")
     print(f"Radial Distance (r) RMSE: {rmse:.2f}")
     print(f"MAE: {mae:.2f}")
-    
-    # Print sample predictions
-    print(f"\nSample predictions (first 10):")
-    print("True r | Pred r | Error")
-    print("-" * 30)
-    for i in range(min(10, len(Y_val))):
-        error = abs(Y_val[i, 0] - val_pred[i, 0])
-        print(f"{Y_val[i, 0]:6.2f} | {val_pred[i, 0]:6.2f} | {error:6.2f}")
+
 
 
 if __name__ == "__main__":

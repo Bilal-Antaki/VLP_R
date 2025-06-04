@@ -19,7 +19,7 @@ from sklearn.model_selection import cross_val_score
 
 
 class FeatureSelector:
-    def __init__(self, target_col='r', n_features=7, method='random_forest'):
+    def __init__(self, target_col='r', n_features=7):
         """
         Initialize the feature selector
         
@@ -29,12 +29,9 @@ class FeatureSelector:
             Target column name (default: 'r' for radial distance)
         n_features : int
             Total number of features to select (including PL and RMS)
-        method : str
-            Selection method - 'lasso', 'random_forest', or 'mutual_info'
         """
         self.target_col = target_col
         self.n_features = n_features
-        self.method = method
         self.feature_scores = {}
         self.selected_features = []
         self.scaler = StandardScaler()
@@ -209,63 +206,6 @@ class FeatureSelector:
         
         return selected_features
     
-    def select_with_random_forest(self, X, y, feature_names):
-        """
-        Select features using Random Forest importance
-        
-        Parameters:
-        -----------
-        X : np.ndarray
-            Feature matrix
-        y : np.ndarray
-            Target values (radial distance)  
-        feature_names : list
-            Names of features
-            
-        Returns:
-        --------
-        list : Selected feature names
-        """
-        print(f"\n--- Random Forest Feature Selection (Top {self.n_features} features) ---")
-        
-        # Random Forest for single output regression
-        rf = RandomForestRegressor(n_estimators=200, random_state=42, n_jobs=-1, max_depth=10)
-        rf.fit(X, y.ravel())
-        
-        # Get feature importances
-        feature_importance = rf.feature_importances_
-        
-        # Create a dict of feature scores
-        feature_score_dict = dict(zip(feature_names, feature_importance))
-        
-        # Print scores for mandatory features
-        print(f"\nMandatory feature scores:")
-        for feat in self.mandatory_features:
-            if feat in feature_score_dict:
-                print(f"  {feat}: {feature_score_dict[feat]:.4f}")
-        
-        # Get top features (excluding mandatory ones first)
-        non_mandatory_features = [f for f in feature_names if f not in self.mandatory_features]
-        non_mandatory_scores = [(f, feature_score_dict[f]) for f in non_mandatory_features]
-        non_mandatory_scores.sort(key=lambda x: x[1], reverse=True)
-        
-        # Select top features after mandatory ones
-        n_additional = self.n_features - len(self.mandatory_features)
-        selected_additional = [f for f, score in non_mandatory_scores[:n_additional]]
-        
-        # Combine mandatory and selected features
-        selected_features = self.mandatory_features + selected_additional
-        
-        # Print all selected features with scores
-        print(f"\nSelected {len(selected_features)} features:")
-        for feat in selected_features:
-            print(f"  {feat}: {feature_score_dict[feat]:.4f}")
-        
-        # Store scores
-        self.feature_scores['random_forest'] = feature_score_dict
-        
-        return selected_features
-    
     def visualize_feature_importance(self, selected_features):
         """
         Visualize feature importance scores
@@ -280,7 +220,7 @@ class FeatureSelector:
             return
         
         # Get the scores for the method used
-        method_scores = self.feature_scores[self.method]
+        method_scores = self.feature_scores['lasso']
         
         # Get scores for selected features
         selected_scores = [(feat, method_scores.get(feat, 0)) for feat in selected_features]
@@ -304,7 +244,7 @@ class FeatureSelector:
         
         plt.xlabel('Features', fontsize=12)
         plt.ylabel('Importance Score', fontsize=12)
-        plt.title(f'{self.method.title()} Feature Importance - Top {self.n_features} Features', fontsize=14)
+        plt.title('Lasso Feature Importance - Top 7 Features', fontsize=14)
         plt.xticks(positions, features, rotation=45, ha='right')
         
         # Add legend
@@ -322,7 +262,7 @@ class FeatureSelector:
     
     def select_features(self):
         """
-        Main method to perform feature selection
+        Main method to perform feature selection using Lasso
         
         Returns:
         --------
@@ -340,23 +280,12 @@ class FeatureSelector:
             print(f"Warning: Mandatory features {missing_mandatory} not found in data!")
             self.mandatory_features = [f for f in self.mandatory_features if f in feature_names]
         
-        # Apply selected method
-        if self.method == 'lasso':
-            selected_features = self.select_with_lasso(X, y, feature_names)
-        elif self.method == 'mutual_info':
-            selected_features = self.select_with_mutual_info(X, y, feature_names)
-        elif self.method == 'random_forest':
-            selected_features = self.select_with_random_forest(X, y, feature_names)
-        else:
-            raise ValueError(f"Unknown method: {self.method}. Use 'lasso', 'mutual_info', or 'random_forest'")
-        
+        # Apply Lasso feature selection
+        selected_features = self.select_with_lasso(X, y, feature_names)
         self.selected_features = selected_features
         
         # Visualize feature importance
         self.visualize_feature_importance(selected_features)
-        
-        # Save selected features
-        self.save_selected_features(df, selected_features)
         
         return selected_features
     
@@ -398,17 +327,12 @@ class FeatureSelector:
             print(f"{i:2d}. {feature}")
 
 
-def main(method='random_forest'):
+def main():
     """
-    Main function to perform feature selection
-    
-    Parameters:
-    -----------
-    method : str
-        Feature selection method - 'lasso', 'random_forest', or 'mutual_info'
+    Main function to perform feature selection using Lasso
     """
     # Initialize selector with 7 features total (including PL and RMS) for radial distance
-    selector = FeatureSelector(target_col='r', n_features=7, method=method)
+    selector = FeatureSelector(target_col='r', n_features=7)
     
     # Perform feature selection
     selected_features = selector.select_features()

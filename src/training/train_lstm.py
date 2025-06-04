@@ -219,17 +219,7 @@ def train_model():
         print(f"RMSE: {rmse_per_traj.mean():.2f}")
         print(f"Std: {rmse_per_traj.std():.2f}")
         print(f"MAE: {np.mean(np.abs(Y_val_true - val_pred)):.2f}")
-        
-        # Print sample predictions
-        print(f"\nSample true and predicted values (first trajectory):")
-        print(f"True r: {Y_val_true[0].ravel()}")
-        print(f"Pred r: {val_pred[0].ravel()}")
-        
-        # Check distance constraints (if applicable)
-        print(f"\nDistance statistics:")
-        print(f"Min predicted r: {val_pred.min():.2f}")
-        print(f"Max predicted r: {val_pred.max():.2f}")
-        print(f"Mean predicted r: {val_pred.mean():.2f}")
+        print(f"Mean: {val_pred.mean():.2f}")
 
 
 if __name__ == "__main__":

@@ -154,11 +154,6 @@ def train_model():
     print(f"RMSE: {rmse_per_traj.mean():.2f} ± {rmse_per_traj.std():.2f}")
     print(f"MAE: {np.mean(np.abs(Y_val - val_pred)):.2f}")
     
-    # Print sample predictions
-    print(f"\nSample predictions (first trajectory):")
-    print(f"True r: {Y_val[0].ravel()}")
-    print(f"Pred r: {val_pred[0].ravel()}")
-    
     # Save model and results
     model_data = {
         'model': model,
@@ -207,13 +202,6 @@ def load_and_evaluate():
         
         # Predict
         predictions = model.predict(X_test)
-        
-        print(f"\nPredictions for trajectory {test_traj_id}:")
-        print("Step | True r | Pred r | Error r")
-        print("-" * 40)
-        for i in range(len(predictions)):
-            error_r = abs(Y_test[i, 0] - predictions[i, 0])
-            print(f"{i+1:4d} | {Y_test[i, 0]:6.2f} | {predictions[i, 0]:6.2f} | {error_r:6.2f}")
         
         # Overall metrics
         mae_r = np.mean(np.abs(Y_test[:, 0] - predictions[:, 0]))

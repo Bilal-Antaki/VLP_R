@@ -15,14 +15,9 @@ from src.data.feature_engineering import main as run_feature_engineering
 from src.data.preprocessing import load_and_preprocess_data
 
 # Create a wrapper to run the complete pipeline
-def run_complete_pipeline(selection_method='random_forest'):
+def run_complete_pipeline():
     """
     Run the complete feature engineering and selection pipeline
-    
-    Parameters:
-    -----------
-    selection_method : str
-        Feature selection method - 'lasso' or 'random_forest'
     """
     print("="*60)
     print("TRAJECTORY PREDICTION - FEATURE ENGINEERING PIPELINE")
@@ -35,12 +30,12 @@ def run_complete_pipeline(selection_method='random_forest'):
     
     # Step 2: Run feature selection
     print("\n\nStep 2: Selecting best features...")
-    print(f"Method: {selection_method.upper()}")
+    print("Method: LASSO")
     print("-"*40)
     
-    # Import and run feature selection with the specified method
+    # Import and run feature selection
     from src.data.feature_selection import main as run_feature_selection
-    selected_features = run_feature_selection(method=selection_method)
+    selected_features = run_feature_selection()
     
     # Step 3: Load and preprocess the selected features
     print("\n\nStep 3: Loading and preprocessing selected features...")
@@ -57,15 +52,13 @@ def run_complete_pipeline(selection_method='random_forest'):
     print(f"✓ Selected features (7 total) saved to: data/features/features_selected.csv")
     print(f"✓ Feature importance plot saved to: data/features/feature_importance.png")
     print(f"✓ Data preprocessed and split into training/validation sets")
-    print(f"\nSelected features include mandatory PL and RMS plus top 5 from {selection_method}")
+    print(f"\nSelected features include mandatory PL and RMS plus top 5 from Lasso")
     
     return features_df, selected_features, (X_train, Y_train, X_val, Y_val)
 
 
 if __name__ == "__main__":
-    METHOD = 'random_forest'  # 'lasso' or 'random_forest'
-    
     # Run the complete pipeline
-    features_df, selected_features, (X_train, Y_train, X_val, Y_val) = run_complete_pipeline(selection_method=METHOD)
+    features_df, selected_features, (X_train, Y_train, X_val, Y_val) = run_complete_pipeline()
     print(X_train.shape)
     print(Y_train.shape)
